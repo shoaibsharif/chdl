@@ -58,7 +58,6 @@ const inquiry = async () => {
 };
 
 async function downloadVideo(startIndex, lastIndex, folder) {
-  console.log('I am inside the downloadVideo function and this are the variable', typeof startIndex, typeof lastIndex, folder);
   let number = startIndex;
   if (number === 0) {
     console.log('startIndex can not be 0');

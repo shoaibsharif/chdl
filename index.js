@@ -1,19 +1,31 @@
 const Fs = require('fs');
 const Path = require('path');
 const Axios = require('axios');
+const cheerio = require('cheerio');
 const _progress = require('cli-progress');
 const chalk = require('chalk');
 const inquirer = require('inquirer');
 const { isURL, isEmpty, contains } = require('validator');
 
-let courseHunterUrl, startIndex, lastIndex, folder;
+let courseHunterUrl, startIndex, lastIndex, folder, WebUrl;
 
 const inquiry = async () => {
   const answers = await inquirer.prompt([
     {
       type: 'input',
+      name: 'WebUrl',
+      message: 'Please enter the coursehunter Website url(you can leave blank if you want)',
+      validate: value => {
+        if (!isURL(value)) {
+          return 'Please enter a valid URL';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
       name: 'courseHunterUrl',
-      message: 'Please enter the coursehunter url',
+      message: 'Please enter the coursehunter media url',
       validate: value => {
         if (!isURL(value) || isEmpty(value)) {
           return 'Please enter a valid URL';
@@ -54,10 +66,24 @@ const inquiry = async () => {
     folder = answers.folder;
     startIndex = answers.startIndex;
     lastIndex = answers.lastIndex;
+    WebUrl = answers.WebUrl;
   }
 };
+const LessonName = async WebUrl => {
+  const { data: html } = await Axios.get(WebUrl);
+  const $ = cheerio.load(html);
+  const lessons = [];
+  $('.lessons-name').each(function(i, elem) {
+    lessons.push(
+      $(this)
+        .text()
+        .replace('/', '___')
+    );
+  });
+  return lessons;
+};
 
-async function downloadVideo(startIndex, lastIndex, folder) {
+async function downloadVideo(startIndex, lastIndex, folder, lessons) {
   let number = startIndex;
   if (number === 0) {
     console.log('startIndex can not be 0');
@@ -65,7 +91,7 @@ async function downloadVideo(startIndex, lastIndex, folder) {
   }
 
   const url = `${courseHunterUrl}/lesson${number}.mp4`;
-  const path = Path.resolve(__dirname, folder, `lesson${number}.mp4`);
+  const path = Path.resolve(__dirname, folder, `${number}.${lessons[number - 1]}.mp4`);
   const writer = Fs.createWriteStream(path);
 
   const response = await Axios({
@@ -105,19 +131,20 @@ async function downloadVideo(startIndex, lastIndex, folder) {
     debugger;
     if (lastIndex > number) {
       number++;
-      downloadVideo(number, lastIndex, folder);
+      downloadVideo(number, lastIndex, folder, lessons);
     }
   });
   writer.on('error', () => console.error('error'));
 }
 
 inquiry()
-  .then(() => {
+  .then(async () => {
     try {
       Fs.accessSync(folder, Fs.constants.R_OK);
     } catch (error) {
       Fs.mkdirSync(folder);
     }
-    downloadVideo(startIndex, lastIndex, folder).catch(err => console.log(err));
+    const lessons = await LessonName(WebUrl);
+    downloadVideo(startIndex, lastIndex, folder, lessons).catch(err => console.log(err));
   })
   .catch(err => console.log(err));
